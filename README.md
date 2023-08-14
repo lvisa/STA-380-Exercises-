@@ -25,9 +25,7 @@ The "Association Rule Mining" exercise is contained in the following files:
 
 Image Classification with NN Exercise
 
-The "Image Classification with Neural Networks" exercise is contained in the following files:
-
-Due to the lengthy processing time required for this exercise, it's separated from the main notebook:
+The "Image Classification with Neural Networks" exercise is contained in the following files.Due to the lengthy processing time required for this exercise, it's separated from the main notebook:
 
 •	CNN - Jupyter Notebook: The Python code written in a Jupyter Notebook format.
 •	CNN - Jupyter Notebook.pdf: A comprehensive report that presents the results and analysis.
