@@ -1,0 +1,125 @@
+---
+title: "Grocery Rule Mining"
+author: "Eeshana Hamed, Anurag Arakala, Luis Villazon, Sardar Muhammad Ahmad Ali"
+date: "2023-08-14"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Convert txt format into data frame (saved as a csv)
+```{r step1, echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(igraph)
+library(arules)  
+library(arulesViz)
+
+# Convert txt format into data frame
+lines = readLines("groceries.txt")
+
+# Initialize lists to store customer numbers and purchases
+customer_numbers = c()
+purchases = c()
+
+# Process each line in the text file
+for (customer_num in seq_along(lines)) {
+  items = unlist(strsplit(lines[customer_num], ","))
+  customer_numbers = c(customer_numbers, rep(customer_num, length(items)))
+  purchases = c(purchases, items)
+}
+
+# Create a data frame
+df = data.frame(customer = customer_numbers, purchase = purchases)
+
+# Save the data frame as a CSV file
+write.csv(df, "groceries.csv", row.names = FALSE)
+```
+
+## 2. Analyze dataset and determine support, confidence, and list
+```{r step2, echo=FALSE, message=FALSE, warning=FALSE}
+groceries_raw = read.csv("groceries.csv")
+
+str(groceries_raw)
+summary(groceries_raw)
+```
+
+```{r step2a, echo=FALSE, message=FALSE, warning=FALSE}
+values = sort(table(groceries_raw$purchase), decreasing=TRUE)
+q3 = quantile(values, probs = 0.75)  # Upper quartile (Q3)
+q2 = quantile(values, probs = 0.50)  # median (Q2)
+q1 = quantile(values, probs = 0.25)  # Lower quartile (Q1)
+
+# Extract values in the lower quartile and upper quartile
+q3_values = values[values >= q3]
+q2_values = values[values >= q2 - 1 & values <= q2 + 1]
+q1_values = values[values <= q1]
+```
+Q3 Values (highest frequency): 
+```{r step2b, echo=FALSE, message=FALSE, warning=FALSE}
+q3_values
+```
+Q1 Values (lowest frequency): 
+```{r step2c, echo=FALSE, message=FALSE, warning=FALSE}
+q1_values
+```
+Highest Value in each Quartile:
+```{r step2d, echo=FALSE, message=FALSE, warning=FALSE}
+max(values[values <= q1])
+max(values[values >= q2 - 1 & values <= q2 + 1])
+max(values[values >= q3])
+```
+
+After looking at the frequency of each item and dividing them into groups of 25%, 50%, and 75% of data, looking at the highest and average values in each quartile gives me an idea of the range for support I could use to include most of the data set in determining rules or narrow it down to use only very high frequency items in the set. Looking at a support range of [0.0008(38/43367), 0.05(2513/43367)] gives a range of support that would include the most amount of data to the least. Looking at a median value of 103 in Q2, to analyze the items that occur a good amount, we started with a support of .002(103/43367). However, we were not getting high enough lift values (<8), so we decided to decrease it to .0015 and start with a confidence of .1.   
+
+
+## 3. Apply rule mining model and plot data points
+Beginning with a support of .0015 and a confidence of .1, we get the following plot that gives an overall idea of confidence, lift, and support values:
+```{r step3, include=FALSE, message=FALSE, warning=FALSE}
+groceries_raw$customer = factor(groceries_raw$customer)
+grocery_lists = split(x=groceries_raw$purchase, f=groceries_raw$customer)
+grocery_lists = lapply(grocery_lists, unique)
+
+grocery_trans = as(grocery_lists, "transactions")
+summary(grocery_trans)
+
+grocery_rules = apriori(grocery_trans, 
+                     parameter=list(support=.0015, confidence=.1, maxlen=4))
+```
+
+```{r step3plot, echo=FALSE, message=FALSE, warning=FALSE}
+plot(grocery_rules, measure = c("support", "lift"), shading = "confidence")
+```
+
+Seeing the concentration of high confidence values around a lift of 4, we can adjust the plot to get a better idea of the values: 
+```{r step4, include=FALSE, message=FALSE, warning=FALSE}
+grocery_rules_plot = apriori(grocery_trans, 
+                     parameter=list(support=.0015, confidence=.5, maxlen=4))
+```
+
+```{r step4plot, echo=FALSE, message=FALSE, warning=FALSE}
+plot(grocery_rules_plot, measure = c("support", "lift"), shading = "confidence")
+```
+
+Looking at this scatter plot, we want to focus our analysis on high lift and confidence values: 
+
+* Our highest lift points (above 7) tend to have low to medium confidence and lower support -> this means these items don't appear in grocery baskets very often, but when it does, the presence of one item influences the occurrence of the other item. However, a lower confidence could question the accuracy of this association. 
+
+Here are some items that show this relation: 
+```{r step5, echo=FALSE, message=FALSE, warning=FALSE}
+inspect(subset(grocery_rules, subset=lift > 10))
+```
+
+In terms of high confidence, we can see that the purchase of a lot of alcoholic drinks indicates the likelihood of buying another type of alcoholic drink. For example, {liquor, red/blush wine} and {bottled beer}  has a confidence of 90%, indicating many people who purchased liquor and wine also purchased bottled beer. When we look at someone who purchased {bottled beer, red/blush wine} , they also had {liquor} in their cart 40% of the time. This is less than the previous association, however it has a much higher lift, indicating that when some buys {bottled beer, red/blush wine} they are much more likely to also purchase {liquor} than some who has {liquor, red/blush wine} and is likely to buy {bottled beer}. Furthermore, we also see high lift, medium confidence associations between instant products and hamburger meat, ham, processed cheese and white bread (for sandwiches?), and baking ingredients (sugar, flour, margarine). These points indicate interesting facts about eating habits of consumers. 
+
+Returning to this plot, we can now look at some more higher confidence but lower lift points: 
+```{r step6plot, echo=FALSE, message=FALSE, warning=FALSE}
+plot(grocery_rules_plot, measure = c("support", "lift"), shading = "confidence")
+```
+Here are some items that show this relation:
+```{r step6, echo=FALSE, message=FALSE, warning=FALSE}
+inspect(subset(grocery_rules, subset=lift > 6 & confidence > .5))
+```
+
+Here we can see that these items occur more often in baskets together, however buying one does not always indicate that they will buy the other. These items are more indicative of purchases that would be deemed basic household items typically bought together when consumers go for their larger monthly purchases of common necessities (milk, rice, yogurt, vegetables, etc.) 
